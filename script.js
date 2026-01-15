@@ -123,40 +123,35 @@ async function saveToCloud() {
 async function loadFromCloud() {
     if (!supabase) return;
     try {
+        console.log("Loading form cloud...");
         const { data, error } = await supabase
             .from('players')
             .select('*')
             .eq('id', state.playerId)
             .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" which is fine for new users
-            console.error("Cloud load error:", error);
+        if (error) {
+            // Quiet fail or log
+            if (error.code !== 'PGRST116') console.warn("Cloud load warn:", error);
             return;
         }
 
         if (data && data.save_data) {
-            // Check if cloud save is newer or better? 
-            // For now simple logic: if cloud save exists and local is empty/weak, or user confirms.
-            // Actually, best practice is to load seamlessly if local is older.
-            // Comparing lastSaveTime
-            let cloudSave = data.save_data;
-            if (cloudSave.totalClicks > state.stats.totalClicks || cloudSave.coins > state.coins) {
-                console.log("Found better cloud save, loading...");
-                state = cloudSave;
-
-                // Re-init migrations just in case
-                if (!state.settings) state.settings = { master: 100, music: 50, sfx: 100, particles: true };
-                // ... other migrations
-
+            // Basic conflict resolution: only load if cloud has significantly more progress
+            let cloudState = data.save_data;
+            if (cloudState.stats.totalClicks > state.stats.totalClicks || cloudState.coins > state.coins + 1000) {
+                console.log("Cloud save is better, loading...");
+                state = cloudState;
+                if (!state.playerId) state.playerId = data.id; // Restore ID if missing
                 updateUI();
                 renderSkins();
                 renderPets();
-                save(); // Save to local
-                alert("Прогресс загружен из облака!");
+                save(); // Save imported state to local
+                // Silent toast or indicator could go here, but avoiding alert
             }
         }
     } catch (err) {
-        console.error(err);
+        console.error("Cloud load crash:", err);
     }
 }
 
