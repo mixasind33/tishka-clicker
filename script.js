@@ -1,4 +1,14 @@
 // CONFIG
+const SU_URL = 'https://hcmvgcbyjghmtvjzzyja.supabase.co';
+const SU_KEY = 'sb_publishable_ZgBkDKRY0LE-n7TgVm7Dwg_tsqKRomT';
+let supabase;
+try {
+    supabase = window.supabase.createClient(SU_URL, SU_KEY);
+    console.log("Supabase initialized");
+} catch (e) {
+    console.error("Supabase init error:", e);
+}
+
 const SKINS = {
     'default': { name: 'Тишка', cost: 0, svg: '' },
     'glasses': { name: 'Крутой', cost: 20000, svg: '<g><circle cx="65" cy="90" r="24" fill="rgba(0,0,0,0.5)" stroke="white" stroke-width="2"/><circle cx="135" cy="90" r="24" fill="rgba(0,0,0,0.5)" stroke="white" stroke-width="2"/><line x1="89" y1="90" x2="111" y2="90" stroke="white" stroke-width="2"/></g>' },
@@ -10,6 +20,7 @@ const LEAGUES = [{ name: 'Bronze', min: 0 }, { name: 'Silver', min: 5000 }, { na
 
 // STATE
 let state = JSON.parse(localStorage.getItem('TishkaV7_Ult')) || {
+    playerId: crypto.randomUUID(), // New unique ID
     coins: 0, clickPower: 1, autoPower: 0, energy: 1000, maxEnergy: 1000,
     costs: { click: 10, auto: 50, max: 200 }, prestige: 0, multiplier: 1,
     skinsOwned: ['default'], currentSkin: 'default', pets: [],
@@ -23,6 +34,7 @@ let state = JSON.parse(localStorage.getItem('TishkaV7_Ult')) || {
 };
 
 // MIGRATION for old saves
+if (!state.playerId) state.playerId = crypto.randomUUID(); // Assign ID if missing
 if (!state.settings) state.settings = { master: 100, music: 50, sfx: 100, particles: true };
 if (!state.daily) state.daily = { streak: 0, lastClaimTime: 0 };
 if (!state.daily) state.daily = { streak: 0, lastClaimTime: 0 };
@@ -41,7 +53,113 @@ const audioMeow = new Audio('https://cdn.pixabay.com/download/audio/2022/10/16/a
 const audioWin = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3');
 
 // FUNCTIONS
-function save() { state.lastSaveTime = Date.now(); localStorage.setItem('TishkaV7_Ult', JSON.stringify(state)); }
+function save() {
+    state.lastSaveTime = Date.now();
+    localStorage.setItem('TishkaV7_Ult', JSON.stringify(state));
+    saveToCloud(); // Attempt cloud save
+}
+
+// CLOUD SAVE DEBOUNCED
+let saveTimeout;
+let lastCloudError = "";
+
+// Click handler for status
+document.getElementById('cloud-status').onclick = function () {
+    if (lastCloudError) alert("Ошибка Supabase: " + JSON.stringify(lastCloudError));
+};
+
+window.testConnection = async function () {
+    alert("Проверяю соединение...");
+    try {
+        const { data, error } = await supabase.from('players').select('count').limit(1).single();
+        if (error && error.code !== 'PGRST116') {
+            alert("Ошибка соединения:\n" + JSON.stringify(error, null, 2));
+        } else {
+            alert("Соединение успешно! База отвечает.");
+            saveToCloud(); // Try saving again
+        }
+    } catch (e) {
+        alert("Критическая ошибка:\n" + e.message);
+    }
+};
+
+async function saveToCloud() {
+    if (!supabase) return;
+
+    // UI Update: Saving
+    document.getElementById('cloud-status').innerText = "☁️ ...";
+    document.getElementById('cloud-status').style.color = "#ffaa00";
+
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(async () => {
+        try {
+            const { error } = await supabase
+                .from('players')
+                .upsert({ id: state.playerId, save_data: state, updated_at: new Date() }, { onConflict: 'id' });
+
+            if (error) {
+                console.error("Cloud save failed:", error);
+                lastCloudError = error;
+                document.getElementById('cloud-status').innerText = "☁️ Ошибка (нажми)";
+                document.getElementById('cloud-status').style.color = "red";
+                document.getElementById('cloud-status').style.cursor = "pointer";
+            }
+            else {
+                console.log("Cloud save success");
+                lastCloudError = "";
+                document.getElementById('cloud-status').innerText = "☁️ ОК";
+                document.getElementById('cloud-status').style.color = "#00ff00";
+                document.getElementById('cloud-status').style.cursor = "default";
+            }
+        } catch (err) {
+            console.error(err);
+            lastCloudError = err;
+            document.getElementById('cloud-status').innerText = "☁️ Ошибка (нажми)";
+            document.getElementById('cloud-status').style.color = "red";
+        }
+    }, 2000); // Wait 2s before sending to avoid spam
+}
+
+async function loadFromCloud() {
+    if (!supabase) return;
+    try {
+        const { data, error } = await supabase
+            .from('players')
+            .select('*')
+            .eq('id', state.playerId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" which is fine for new users
+            console.error("Cloud load error:", error);
+            return;
+        }
+
+        if (data && data.save_data) {
+            // Check if cloud save is newer or better? 
+            // For now simple logic: if cloud save exists and local is empty/weak, or user confirms.
+            // Actually, best practice is to load seamlessly if local is older.
+            // Comparing lastSaveTime
+            let cloudSave = data.save_data;
+            if (cloudSave.totalClicks > state.stats.totalClicks || cloudSave.coins > state.coins) {
+                console.log("Found better cloud save, loading...");
+                state = cloudSave;
+
+                // Re-init migrations just in case
+                if (!state.settings) state.settings = { master: 100, music: 50, sfx: 100, particles: true };
+                // ... other migrations
+
+                updateUI();
+                renderSkins();
+                renderPets();
+                save(); // Save to local
+                alert("Прогресс загружен из облака!");
+            }
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 function format(n) { if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M'; if (n >= 1000) return (n / 1000).toFixed(1) + 'k'; return Math.floor(n); }
 
 function getVolume(type) {
@@ -643,7 +761,8 @@ function initSettings() {
     document.querySelector('input[oninput*="setVolume(\'music\'"]').value = state.settings.music;
     document.querySelector('input[oninput*="setVolume(\'sfx\'"]').value = state.settings.sfx;
     document.getElementById('particles-state').innerText = state.settings.particles ? "ВКЛ" : "ВЫКЛ";
-    document.getElementById('player-id').innerText = "ID: " + Math.floor(Math.random() * 999999);
+    document.getElementById('particles-state').innerText = state.settings.particles ? "ВКЛ" : "ВЫКЛ";
+    document.getElementById('player-id').innerText = state.playerId;
 
     // Start music interaction check
     document.body.addEventListener('click', () => {
@@ -694,11 +813,51 @@ window.showRewardPopup = function (amount, source) {
 checkOffline();
 checkDailyReward();
 initSettings();
+loadFromCloud(); // Try to load on start
 renderSkins();
 renderPets();
 updateUI();
 if (state.lastDate === new Date().toDateString()) { document.getElementById('daily-btn').disabled = true; document.getElementById('daily-btn').innerText = 'ЗАВТРА'; }
 setInterval(save, 5000);
+
+// RESTORE & COPY
+window.copyId = function () {
+    let idText = document.getElementById('player-id').innerText;
+    navigator.clipboard.writeText(idText).then(() => {
+        alert("ID скопирован в буфер обмена!");
+    });
+}
+
+window.restoreById = async function () {
+    let inputId = document.getElementById('restore-input').value.trim();
+    if (!inputId) return alert("Введите ID");
+
+    if (confirm("Внимание! Это перезапишет текущий прогресс. Уверены?")) {
+        try {
+            const { data, error } = await supabase
+                .from('players')
+                .select('*')
+                .eq('id', inputId)
+                .single();
+
+            if (data && data.save_data) {
+                state = data.save_data;
+                state.playerId = inputId; // Ensure ID matches
+
+                // Migrations just in case
+                if (!state.settings) state.settings = { master: 100, music: 50, sfx: 100, particles: true };
+
+                save(); // Save to local
+                location.reload();
+            } else {
+                alert("Сохранение с таким ID не найдено.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Ошибка при восстановлении.");
+        }
+    }
+}
 
 // LASER DOT MINI-GAME
 function spawnLaserDot() {

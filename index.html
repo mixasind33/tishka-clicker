@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tishka Coin 7.0 Ultimate (Final)</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -16,7 +17,7 @@
             <div class="icon-circle">⚙️</div>
             <div style="display:flex; flex-direction:column; align-items:flex-start;">
                 <span class="league-text" id="league-disp">Bronze</span>
-                <span id="prestige-disp" style="font-size:10px;"></span>
+                <span id="cloud-status" style="font-size:10px; color:#aaa;">☁️ Подкл.</span>
             </div>
         </div>
         <div class="header-pill right">
@@ -313,7 +314,23 @@
             <button class="buy-btn" style="background:var(--danger); color:#fff; width:100%; padding:15px;"
                 onclick="doPrestige()" id="prestige-btn">РЕБИТ (Сброс за x2)</button>
             <p style="font-size:10px; color:#666; margin-top:5px;">Требуется 1М монет</p>
-            <div style="margin-top:20px; font-size:10px; color:#444;">ID: <span id="player-id">PLAYER</span></div>
+            <div style="margin-top:20px; font-size:10px; color:#444; border-top:1px solid #333; padding-top:10px;">
+                <div>Твой ID (нажми чтобы скопировать):</div>
+                <div id="player-id" onclick="copyId()"
+                    style="background:#111; padding:5px; border-radius:4px; margin:5px 0; color:#fff; font-family:monospace; cursor:pointer;">
+                    LOADING...</div>
+
+                <div style="margin-top:10px;">Восстановить сохранение:</div>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="restore-input" placeholder="Введи ID..."
+                        style="background:#111; border:1px solid #444; color:white; padding:5px; flex:1; border-radius:4px;">
+                    <button class="buy-btn" onclick="restoreById()"
+                        style="padding:5px 10px; font-size:12px;">ОК</button>
+                </div>
+
+                <button class="buy-btn" style="background:#555; width:100%; margin-top:15px;"
+                    onclick="testConnection()">🛠️ Проверить соединение</button>
+            </div>
         </div>
     </div>
 
