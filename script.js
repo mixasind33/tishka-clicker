@@ -1,6 +1,6 @@
 // CONFIG
 const SU_URL = 'https://hcmvgcbyjghmtvjzzyja.supabase.co';
-const SU_KEY = 'sb_publishable_ZgBkDKRY0LE-n7TgVm7Dwg_tsqKRomT';
+const SU_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbXZnY2J5amdobXR2anp6eWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzIwMjYsImV4cCI6MjA4NDA0ODAyNn0.Hss-SP6CDrmdMn0QrrTNG0Moyecwz4iKIGt9W8zvFHM';
 let supabase;
 try {
     supabase = window.supabase.createClient(SU_URL, SU_KEY);
